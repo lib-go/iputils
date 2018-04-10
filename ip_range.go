@@ -102,7 +102,7 @@ func (r *IPRange) PopRight() (IP net.IP, e error) {
 	return
 }
 
-func (r *IPRange) RemoveLeft(count uint32) (ipRange *IPRange, e error) {
+func (r *IPRange) TrimLeft(count uint32) (ipRange *IPRange, e error) {
 	if r.beginNum+count > r.endNum {
 		return nil, fmt.Errorf("ipRange begin + count > end")
 	}
@@ -112,7 +112,7 @@ func (r *IPRange) RemoveLeft(count uint32) (ipRange *IPRange, e error) {
 	return
 }
 
-func (r *IPRange) RemoveRight(count uint32) (ipRange *IPRange, e error) {
+func (r *IPRange) TrimRight(count uint32) (ipRange *IPRange, e error) {
 	if r.beginNum > r.endNum-count {
 		return nil, fmt.Errorf("ipRange begin > end - count")
 	}
@@ -122,7 +122,7 @@ func (r *IPRange) RemoveRight(count uint32) (ipRange *IPRange, e error) {
 	return
 }
 
-func (r *IPRange) Exclude(leftCount uint32, rightCount uint32) (ipRange *IPRange, e error) {
+func (r *IPRange) Trim(leftCount uint32, rightCount uint32) (ipRange *IPRange, e error) {
 	beginNum := r.beginNum + leftCount
 	endNum := r.endNum - rightCount
 	ipRange, e = NewIPRange(beginNum, endNum)
