@@ -7,21 +7,22 @@ import (
 	"sync"
 )
 
-const CHUNK_SIZE = 8192
+const ChunkSize = 2 ^ 32/8
 
-// 速度优化
-var ErrEmptyBuff error = fmt.Errorf("empty buf")
+var ErrEmptyBuff error = fmt.Errorf("empty bins")
 var ErrIPExhausted error = fmt.Errorf("ip exhausted")
 
 type IPPool struct {
 	sync.Mutex
-	ipRange       IPRange
-	buf           [][]byte
-	bufIPCount    int
-	chunkIPCounts []uint32 // 方便chunk取完后设nil
-	chunkN        int
-	loop          bool
-	offset        uint32
+
+	ipRange *IPRange
+	offset  uint32 // ipRange中已经分配掉的数量
+
+	bins            [][]byte // 记录放回的IP，以bit为单位，每个[]byte长度为ChunkSize
+	binIPCounts     []uint32 // 每个bin的可用IP数量
+	totalBinIPCount int      // 所有bin的IP数量
+
+	loop bool // 如果为true，用完IP后会从头使用
 }
 
 func NewIPPool(ipRange IPRange) (*IPPool, error) {
@@ -29,38 +30,37 @@ func NewIPPool(ipRange IPRange) (*IPPool, error) {
 		return nil, fmt.Errorf("ipRange begin > end")
 	}
 
-	chunkN := int((ipRange.endNum-ipRange.beginNum)/CHUNK_SIZE) + 1
+	chunkN := int((ipRange.endNum-ipRange.beginNum)/ChunkSize) + 1
 	return &IPPool{
-		ipRange:       ipRange,
-		buf:           make([][]byte, chunkN),
-		bufIPCount:    0,
-		chunkIPCounts: make([]uint32, chunkN),
-		chunkN:        chunkN,
+		ipRange:         &ipRange,
+		bins:            make([][]byte, chunkN),
+		totalBinIPCount: 0,
+		binIPCounts:     make([]uint32, chunkN),
 	}, nil
 }
 
-func (a *IPPool) getNumFromBuf() (num uint32, e error) {
+func (a *IPPool) getNumFromBins() (num uint32, e error) {
 	e = ErrEmptyBuff
 
-	if a.bufIPCount == 0 {
+	if a.totalBinIPCount == 0 {
 		return
 	}
 
 	var offset, segment int
 	var count uint32
 	var byte_ byte
-	for segment, count = range a.chunkIPCounts {
+	for segment, count = range a.binIPCounts {
 		if count > 0 {
-			chunk := a.buf[segment]
+			chunk := a.bins[segment]
 			for offset, byte_ = range chunk {
 				if i := bits.Len8(byte_) - 1; i > -1 {
-					a.chunkIPCounts[segment] -= 1
-					a.bufIPCount -= 1
-					if a.chunkIPCounts[segment] == 0 {
-						a.buf[segment] = nil
+					a.binIPCounts[segment] -= 1
+					a.totalBinIPCount -= 1
+					if a.binIPCounts[segment] == 0 {
+						a.bins[segment] = nil
 					}
 					chunk[offset] &^= 1 << uint32(i)
-					return a.ipRange.beginNum + uint32(segment*CHUNK_SIZE+offset*8+i), nil
+					return a.ipRange.beginNum + uint32(segment*ChunkSize+offset*8+i), nil
 				}
 			}
 		}
@@ -71,7 +71,7 @@ func (a *IPPool) getNumFromBuf() (num uint32, e error) {
 func (a *IPPool) GetNum() (num uint32, e error) {
 	a.Lock()
 
-	if num, e = a.getNumFromBuf(); e != nil {
+	if num, e = a.getNumFromBins(); e != nil {
 		for {
 			num = a.ipRange.beginNum + a.offset
 			if num > a.ipRange.endNum {
@@ -101,45 +101,38 @@ func (a *IPPool) GetNum() (num uint32, e error) {
 
 func (a *IPPool) PutNum(num uint32) error {
 	a.Lock()
+	defer a.Unlock()
 
 	if !a.ipRange.Has(num) {
-		a.Unlock()
 		return fmt.Errorf("ip not in range")
 	}
 
 	if a.ipRange.beginNum+a.offset <= num && num <= a.ipRange.endNum {
-		a.Unlock()
-		return fmt.Errorf("ip still exist")
+		return fmt.Errorf("ip still unused")
 	}
 
 	d4 := num % 256
 	if d4 == 0 || d4 == 255 {
-		a.Unlock()
 		return fmt.Errorf("ip not valid")
 	}
 
-	var segment, offset uint32
-	var byte_ byte
-	segment = (num - a.ipRange.beginNum) / CHUNK_SIZE
-	offset = (num - a.ipRange.beginNum) % CHUNK_SIZE
+	var binIndex, bitOffset uint32
+	binIndex = (num - a.ipRange.beginNum) / ChunkSize
+	bitOffset = (num - a.ipRange.beginNum) % ChunkSize
 
-	chunk := a.buf[segment]
-	if chunk == nil {
-		chunk = make([]byte, CHUNK_SIZE)
-		a.buf[segment] = chunk
+	bin := a.bins[binIndex]
+	if bin == nil {
+		bin = make([]byte, ChunkSize)
+		a.bins[binIndex] = bin
 	}
-	byte_ = chunk[offset>>3]
-	numByte := byte(offset % 8)
-	bit := byte(1 << numByte)
-	if (byte_ & bit) == bit {
-		a.Unlock()
+	bit := byte(1 << (bitOffset % 8))
+	if (bin[bitOffset>>3] & bit) == bit {
 		return fmt.Errorf("num already in pool")
 	}
 
-	chunk[offset>>3] = byte_ | bit
-	a.bufIPCount += 1
-	a.chunkIPCounts[segment] += 1
-	a.Unlock()
+	bin[bitOffset>>3] |= bit
+	a.totalBinIPCount += 1
+	a.binIPCounts[binIndex] += 1
 	return nil
 }
 

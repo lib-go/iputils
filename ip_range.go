@@ -66,13 +66,13 @@ func (r IPRange) String() string {
 	return fmt.Sprintf("[%s - %s]", r.FirstIP(), r.LastIP())
 }
 
-func (r *IPRange) HasIntersection(r2 *IPRange) bool {
-	return !(r2.beginNum > r.endNum || r2.endNum < r.beginNum)
-}
-
 func (r *IPRange) Has(ip interface{}) bool {
 	n := AsIPv4Uint32(ip)
 	return r.beginNum <= n && n <= r.endNum
+}
+
+func (r *IPRange) HasOverlap(r2 *IPRange) bool {
+	return !(r2.beginNum > r.endNum || r2.endNum < r.beginNum)
 }
 
 func (r *IPRange) Split(n uint32) (r1 *IPRange, r2 *IPRange, e error) {
@@ -82,9 +82,9 @@ func (r *IPRange) Split(n uint32) (r1 *IPRange, r2 *IPRange, e error) {
 	return
 }
 
-func (r *IPRange) PopLeft() (IP net.IP, e error) {
+func (r *IPRange) PopFirst() (IP net.IP, e error) {
 	if r.beginNum >= r.endNum {
-		return nil, fmt.Errorf("ipRange begin > end")
+		return nil, fmt.Errorf("ipRange begin >= end")
 	}
 
 	IP = r.FirstIP()
@@ -92,9 +92,9 @@ func (r *IPRange) PopLeft() (IP net.IP, e error) {
 	return
 }
 
-func (r *IPRange) PopRight() (IP net.IP, e error) {
+func (r *IPRange) PopLast() (IP net.IP, e error) {
 	if r.beginNum >= r.endNum {
-		return nil, fmt.Errorf("ipRange begin > end")
+		return nil, fmt.Errorf("ipRange begin >= end")
 	}
 
 	IP = r.LastIP()
@@ -102,29 +102,29 @@ func (r *IPRange) PopRight() (IP net.IP, e error) {
 	return
 }
 
-func (r *IPRange) TrimLeft(count uint32) (ipRange *IPRange, e error) {
-	if r.beginNum+count > r.endNum {
-		return nil, fmt.Errorf("ipRange begin + count > end")
+func (r *IPRange) TrimFirstN(n uint32) (ipRange *IPRange, e error) {
+	if r.beginNum+n > r.endNum {
+		return nil, fmt.Errorf("ipRange begin + n > end")
 	}
-	if ipRange, e = NewIPRange(r.beginNum, r.beginNum+count-1); e == nil {
-		r.beginNum += count
-	}
-	return
-}
-
-func (r *IPRange) TrimRight(count uint32) (ipRange *IPRange, e error) {
-	if r.beginNum > r.endNum-count {
-		return nil, fmt.Errorf("ipRange begin > end - count")
-	}
-	if ipRange, e = NewIPRange(r.endNum-count+1, r.endNum); e == nil {
-		r.endNum -= count
+	if ipRange, e = NewIPRange(r.beginNum, r.beginNum+n-1); e == nil {
+		r.beginNum += n
 	}
 	return
 }
 
-func (r *IPRange) Trim(leftCount uint32, rightCount uint32) (ipRange *IPRange, e error) {
-	beginNum := r.beginNum + leftCount
-	endNum := r.endNum - rightCount
+func (r *IPRange) TrimLastN(n uint32) (ipRange *IPRange, e error) {
+	if r.beginNum > r.endNum-n {
+		return nil, fmt.Errorf("ipRange begin > end - n")
+	}
+	if ipRange, e = NewIPRange(r.endNum-n+1, r.endNum); e == nil {
+		r.endNum -= n
+	}
+	return
+}
+
+func (r *IPRange) Trim(firstN uint32, lastN uint32) (ipRange *IPRange, e error) {
+	beginNum := r.beginNum + firstN
+	endNum := r.endNum - lastN
 	ipRange, e = NewIPRange(beginNum, endNum)
 	return
 }
