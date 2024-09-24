@@ -83,6 +83,18 @@ func (a *IPPool) GetIP() (ipv4 net.IP, e error) {
 	return
 }
 
+// GetValidIP 从IPPool中获取一个非0和255结尾的IP
+func (a *IPPool) GetValidIP() (ipv4 net.IP, e error) {
+	var num uint32
+	if num, e = a.GetIPUint32(); e == nil {
+		if num&0xff == 0 || num&0xff == 255 {
+			return a.GetValidIP()
+		}
+		return Uint32ToIPv4(num), nil
+	}
+	return
+}
+
 func (a *IPPool) PutIP(ip net.IP) (e error) {
 	return a.PutIPUint32(AsIPv4Uint32(ip))
 }

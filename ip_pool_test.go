@@ -72,3 +72,19 @@ func TestIPPool_GetIP(t *testing.T) {
 	assert.Nil(t, e)
 	assert.Equal(t, ip, net.IPv4(0, 0, 0, 0).To4())
 }
+
+func TestIPPool_GetValidIP(t *testing.T) {
+	p, e := NewIPPool(mustNewIPRange("0.0.0.254", "0.0.1.1"))
+	assert.Nil(t, e)
+
+	// 第1个IP合法，直接返回
+	ip, e := p.GetValidIP()
+	assert.Nil(t, e)
+	assert.Equal(t, ip, net.IPv4(0, 0, 0, 254).To4())
+
+	// 第2个IP尾0.0.0.255，不合法，返回下下个
+	ip, e = p.GetValidIP()
+	assert.Nil(t, e)
+	assert.Equal(t, ip, net.IPv4(0, 0, 1, 1).To4())
+
+}
