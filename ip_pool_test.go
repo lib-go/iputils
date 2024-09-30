@@ -29,23 +29,25 @@ func TestIPPool_GetIPUint32(t *testing.T) {
 }
 
 func TestIPPool_PutIPUint32(t *testing.T) {
-	p, e := NewIPPool(mustNewIPRange("0.0.0.0", "0.0.0.2"))
+	p, e := NewIPPool(mustNewIPRange("10.16.0.1", "10.16.0.2"))
 	assert.Nil(t, e)
+	var begin uint32 = 168820737
+	t.Log(IPv4ToUint32(net.IPv4(10, 16, 0, 1)))
 
 	// put一个超过ipRange的ip => ErrIPOutOfRange
-	e = p.PutIPUint32(3)
+	e = p.PutIPUint32(begin + 2)
 	assert.NotNil(t, e)
 	assert.Equal(t, e, ErrIPOutOfRange)
 
 	// put一个未分配的ip => ErrIPNotAllocated
-	e = p.PutIPUint32(0)
+	e = p.PutIPUint32(begin)
 	assert.NotNil(t, e)
 	assert.Equal(t, e, ErrIPNotAllocated)
 
 	// put一个已分配的ipu32 => 正常
 	n, e := p.GetIPUint32()
 	assert.Nil(t, e)
-	assert.Equal(t, n, uint32(0))
+	assert.Equal(t, n, begin)
 	e = p.PutIPUint32(n)
 	assert.Nil(t, e)
 	// 二次put同一个ipu32 => ErrIPAlreadyRecycled
@@ -56,11 +58,11 @@ func TestIPPool_PutIPUint32(t *testing.T) {
 	// put后get => 从recycled中取
 	n, e = p.GetIPUint32()
 	assert.Nil(t, e)
-	assert.Equal(t, n, uint32(0))
+	assert.Equal(t, begin, n)
 	// 再次get  => 从ipRange中取
 	n, e = p.GetIPUint32()
 	assert.Nil(t, e)
-	assert.Equal(t, n, uint32(1))
+	assert.Equal(t, begin+1, n)
 }
 
 func TestIPPool_GetIP(t *testing.T) {

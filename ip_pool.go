@@ -53,7 +53,7 @@ func (a *IPPool) GetIPUint32() (ipu32 uint32, e error) {
 		}
 	} else {
 		a.recycleIPs.UnsetBit(uint32(i))
-		return uint32(i), nil
+		return a.ipRange.beginNum + uint32(i), nil
 	}
 }
 
