@@ -35,6 +35,10 @@ func NewIPPool(ipRange *IPRange) (p *IPPool, e error) {
 	}, nil
 }
 
+func (r *IPPool) String() string {
+	return fmt.Sprintf("[Pool@%s - %s]", r.ipRange.At(0), r.ipRange.At(-1))
+}
+
 func (a *IPPool) GetIPUint32() (ipu32 uint32, e error) {
 	a.Lock()
 	defer a.Unlock()
